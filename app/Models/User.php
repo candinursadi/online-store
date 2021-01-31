@@ -11,6 +11,8 @@ use Laravel\Lumen\Auth\Authorizable;
 
 class User extends Model implements AuthenticatableContract, AuthorizableContract
 {
+    protected $table = 'products';
+    
     use Authenticatable, Authorizable, HasFactory;
 
     /**
