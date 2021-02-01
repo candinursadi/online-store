@@ -4,9 +4,13 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use DB;
+use Carbon\Carbon;
 use App\Models\Cart;
 use App\Models\CartDetail;
 use App\Models\Product;
+use App\Models\Order;
+use App\Models\OrderDetail;
+use App\Jobs\OrderJob;
 
 class CartController extends Controller
 {
@@ -37,7 +41,12 @@ class CartController extends Controller
                 ->get();
 
             $data = null;
-            if($cart_detail) $data = $cart_detail->toArray();
+            if($cart_detail){
+                $data = array(
+                    'cart_id' => $cart->id,
+                    'items' => $cart_detail->toArray()
+                );
+            }
 
             $response = $this->response->get_response('00',$data);
 
@@ -85,7 +94,7 @@ class CartController extends Controller
                 $cart_detail->save();
 
                 // SET RESPONSE DATA
-                $data[] = array(
+                $items[] = array(
                     'id' => $cart_detail->product_id,
                     'name' => $get_product->name,
                     'price' => $cart_detail->price,
@@ -93,6 +102,11 @@ class CartController extends Controller
                     'total' => $cart_detail->price * $cart_detail->qty
                 );
             }
+
+            $data = array(
+                'cart_id' => $cart->id,
+                'items' => $items
+            );
 
             $response = $this->response->get_response('00',$data);
 
@@ -106,9 +120,73 @@ class CartController extends Controller
         return response()->json($response, 200);
     }
 
-    public function payment(Request $request, $cart_id = null){
+    public function payment(Request $request){
+        DB::beginTransaction();
+        try{
+            // CHECK CART
+            $cart = Cart::find($request->cart_id);
+            if(!$cart) throw new \Exception(null, 5);
+            if($cart->is_paid) throw new \Exception(null, 7);
+            if(!$cart->detail) throw new \Exception(null, 6);
+
+            // UPDATE CART
+            $cart->is_paid = 1;
+            $cart->save();
+
+            // INSERT INTO ORDER
+            $order = new Order;
+            $order->user_id = $this->user->id;
+            $order->cart_id = $request->cart_id;
+            $order->status = 'PENDING';
+            $order->reference_number = Carbon::now()->format('U');
+            $order->save();
+            
+            // INSERT PRODUCT INTO ORDER DETAIL
+            foreach($cart->detail as $d){
+                $get_product = Product::find($d->product_id);
+                if(!$get_product) throw new \Exception(null, 2);
+                
+                // CHECK AVAILABLE STOCK
+                if($d->qty > $get_product->stock) throw new \Exception(null, 4);
+
+                $order_detail = new OrderDetail;
+                $order_detail->order_id = $order->id;
+                $order_detail->product_id = $d->product_id;
+                $order_detail->price = $d->price;
+                $order_detail->qty = $d->qty;
+                $order_detail->save();
+
+                // SET RESPONSE DATA
+                $items[] = array(
+                    'id' => $order_detail->product_id,
+                    'name' => $get_product->name,
+                    'price' => $order_detail->price,
+                    'qty' => $order_detail->qty,
+                    'total' => $order_detail->price * $order_detail->qty
+                );
+            }
+
+            $data = array(
+                'order_id' => $cart->id,
+                'status' => $order->status,
+                'invoice' => $order->reference_number,
+                'items' => $items
+            );
+
+            dispatch(new OrderJob($order->id))
+            ->onConnection('database')
+            ->onQueue('payment');
+
+            $response = $this->response->get_response('00',$data);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            $response = $this->response->get_response((string) str_pad($e->getCode(), 2, "0", STR_PAD_LEFT),null);
+        }
         
-        
+        return response()->json($response, 200);
     }
     
 }
