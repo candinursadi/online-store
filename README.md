@@ -222,3 +222,14 @@ Schema database, please import the following file:
 ``` 
 schema_online_store.pdf
 ```
+
+## Logging
+
+Logging request response is stored in the following table:
+``` 
+log
+```
+Jobs Queue is stored in the following table:
+``` 
+jobs, failed_jobs
+```
