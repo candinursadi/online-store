@@ -8,4 +8,7 @@ class Cart extends Model
 {
     protected $table = 'carts';
 
+    public function detail() {
+        return $this->hasMany('App\Models\CartDetail', 'cart_id', 'id')->whereNull('is_deleted');
+    }
 }

@@ -10,6 +10,8 @@ class Response
         '02' => "Product not found",
         '04' => "Product quantity exceeds available stock",
         '05' => "Cart not found",
+        '06' => "No product found in cart",
+        '07' => "Bill already paid",
         '99' => "An error has occurred"
     ];
     
